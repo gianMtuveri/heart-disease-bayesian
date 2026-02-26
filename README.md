@@ -215,4 +215,4 @@ If compilation is not available, sampling may still run but can be much slower.
 
 Educational and portfolio use.
 
-Dataset credit: UCI Machine Learning Repository (or your dataset source link).
+Dataset credit: UCI Machine Learning Repository.
