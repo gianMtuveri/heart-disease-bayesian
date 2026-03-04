@@ -1,4 +1,5 @@
 # src/bayes_logit.py
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -8,12 +9,12 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, FunctionTransformer
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import roc_auc_score, classification_report
-
+from sklearn.metrics import roc_auc_score, classification_report, brier_score_loss
+from sklearn.calibration import calibration_curve
 import pymc as pm
 
-DATA_PATH = "data/heart_disease_uci.csv"
 
+DATA_PATH = "data/heart_disease_uci.csv"
 
 def load_data(path: str) -> pd.DataFrame:
     # parse TRUE/FALSE-like tokens robustly
@@ -274,6 +275,33 @@ def plot_odds_ratio_forest(
     print(f"Saved: {out_path}")
 
 
+def plot_calibration(y_test, proba_mean, out_path="results/fig_calibration.png"):
+    """
+    Plot calibration curve and compute Brier score.
+    """
+
+    prob_true, prob_pred = calibration_curve(
+        y_test,
+        proba_mean,
+        n_bins=10,
+        strategy="quantile"
+    )
+
+    brier = brier_score_loss(y_test, proba_mean)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(prob_pred, prob_true, marker="o")
+    plt.plot([0, 1], [0, 1], linestyle="--")
+    plt.xlabel("Predicted probability")
+    plt.ylabel("Observed frequency")
+    plt.title(f"Calibration curve (Brier = {brier:.4f})")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+
+    print(f"Saved: {out_path}")
+    print(f"Brier score: {brier:.4f}")
+
 
 def main():
     df = load_data(DATA_PATH)
@@ -309,6 +337,7 @@ def main():
 
     # Point predictions from posterior mean probability (for a report-like classification table)
     proba_mean = proba_draws.mean(axis=0)
+    plot_calibration(y_test, proba_mean)
     preds = (proba_mean >= 0.5).astype(int)
 
     print("\n=== CLASSIFICATION REPORT (POSTERIOR MEAN THRESHOLD 0.5) ===")
@@ -318,7 +347,6 @@ def main():
     or_df = summarize_odds_ratios(trace, feature_names)
 
     # Save artifacts
-    import os
     os.makedirs("results", exist_ok=True)
     pd.DataFrame({"bayes_auc": aucs}).to_csv("results/bayes_auc_draws.csv", index=False)
     or_df.to_csv("results/bayes_odds_ratios.csv", index=False)
