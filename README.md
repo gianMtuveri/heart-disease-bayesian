@@ -2,212 +2,128 @@
 
 ## Overview
 
-This repository implements Bayesian logistic regression to model heart disease risk using the [UCI Heart Disease dataset](https://www.kaggle.com/datasets/redwankarimsony/heart-disease-data).
+This repository implements Bayesian logistic regression to model heart disease risk using the UCI Heart Disease dataset.
 
-The key difference from standard logistic regression is that Bayesian inference estimates a full posterior distribution for model parameters. This enables uncertainty quantification for:
+The project emphasizes:
 
-- Predictive performance (posterior distribution of ROC AUC)
-- Feature effects (posterior odds ratios with credible intervals)
-- Predicted risk (posterior predictive probabilities)
+- Interpretable modeling
+- Posterior uncertainty quantification
+- Predictive performance assessment
+- Calibration analysis
 
-The focus is interpretable inference and uncertainty, not complex deep learning models.
-
----
-
-## Key Outputs
-
-Running the main script produces:
-
-- results/bayes_auc_draws.csv
-  Posterior draws of ROC AUC evaluated on the fixed test set
-
-- results/bayes_odds_ratios.csv
-  Posterior odds ratios for each feature with 95% credible intervals
-
-Optional figures (if you include the plotting functions):
-
-- results/fig_auc_posterior.png
-  Posterior distribution of AUC (histogram) with mean and 95% interval
-
-- results/fig_or_forest.png
-  Forest plot of odds ratios (log scale) with 95% intervals and OR = 1 reference line
-
----
-
-## Repository Structure
-
-Expected structure:
-
-    heart-disease-bayesian/
-    ├── src/
-    │   └── bayes_logit.py
-    ├── data/
-    │   └── heart_disease_uci.csv        (not committed)
-    ├── results/
-    │   ├── bayes_auc_draws.csv
-    │   ├── bayes_odds_ratios.csv
-    │   ├── fig_auc_posterior.png        (optional)
-    │   └── fig_or_forest.png            (optional)
-    ├── requirements.txt
-    ├── .gitignore
-    └── README.md
+Unlike frequentist logistic regression, this model estimates a full posterior distribution over parameters and predictions.
 
 ---
 
 ## Dataset
 
-Dataset: UCI Heart Disease dataset.
+Source: UCI Heart Disease dataset.
 
-Expected path:
+Binary target definition:
 
-    data/heart_disease_uci.csv
-
-Binary target definition used in this project:
-
-- target = 0 when num == 0
-- target = 1 when num > 0
-
-The script drops non-feature columns such as id, dataset, and num (after creating target).
+- 0 = No heart disease
+- 1 = Presence of heart disease (num > 0)
 
 ---
 
-## Preprocessing
+## Methodology
 
-Preprocessing is implemented with scikit-learn ColumnTransformer to avoid leakage and keep transformations consistent between train and test.
+### Preprocessing
 
-Feature groups:
+Features are grouped by type using a ColumnTransformer:
 
-1) Numeric features
-- Missing values: median imputation
-- Scaling: standardization (mean 0, standard deviation 1) based on training set only
+Numeric features  
+- Median imputation  
+- Standardization  
 
-2) Boolean features
-- Missing values: most frequent imputation
-- Conversion: True/False mapped to 1/0
+Boolean features  
+- Most frequent imputation  
+- Converted to 0/1  
 
-3) Categorical features
-- Missing values: most frequent imputation
-- Encoding: one-hot encoding with handle_unknown="ignore"
+Categorical features  
+- Most frequent imputation  
+- One-hot encoding  
 
-After preprocessing, the design matrix is fully numeric.
-
----
-
-## Bayesian Logistic Regression Model
-
-Model form:
-
-- Linear predictor: intercept + X times beta
-- Probability: logistic function of the linear predictor
-- Likelihood: Bernoulli outcomes
-
-Priors (regularizing):
-
-- intercept is Normal(0, 1)
-- each beta coefficient is Normal(0, 1)
-
-These priors shrink extreme coefficients and improve stability, especially with correlated predictors or limited sample size.
-
-Sampling:
-
-- NUTS (Hamiltonian Monte Carlo) using PyMC
-- Typical run uses tune, draws, and chains (for example 1500 tune, 1500 draws, 2 chains)
-
-Notes on interpretation:
-
-- For standardized numeric features, "one unit" corresponds to one standard deviation of the original feature.
-- For one-hot encoded features, the coefficient represents the effect of that category relative to the implicit baseline induced by encoding and regularization.
+All transformations are fitted on the training set only.
 
 ---
 
-## Posterior Predictive Evaluation
+### Bayesian Logistic Regression
 
-Train and test split:
+Model:
 
-- Stratified split to preserve class proportions
-- Test set is held fixed during evaluation
+logit(P(Y=1|X)) = intercept + X * beta
 
-Posterior predictive probabilities:
+Priors:
 
-- For each posterior draw of parameters, compute predicted probabilities on the test set
-- This yields a distribution of probabilities per test example
+- intercept ~ Normal(0, 1)
+- beta_j ~ Normal(0, 1)
 
-Posterior AUC:
+Posterior inference performed using NUTS (Hamiltonian Monte Carlo) via PyMC.
 
-- Compute ROC AUC on the test set for each posterior draw
-- Save the AUC draws to results/bayes_auc_draws.csv
-- Report mean and 95% credible interval from this distribution
+---
 
-Classification report:
+## Results Summary
 
-- Use posterior mean probability per test example
-- Convert to class label using threshold 0.5
-- Report precision, recall, f1-score, and accuracy
+Test set evaluation:
+
+Posterior ROC AUC  
+Mean: approximately 0.897  
+95 percent credible interval: approximately 0.880 to 0.913  
+
+Classification accuracy: approximately 0.84  
+
+Calibration:
+
+Brier score: 0.1218  
+
+This indicates:
+
+- Strong discrimination
+- Good probability calibration
+- Stable predictive performance
 
 ---
 
 ## Posterior Odds Ratios
 
-Odds ratio is computed as:
+Odds ratios are computed as exp(beta).
 
-- odds_ratio = exp(beta)
+Strong and stable predictors include:
 
-For each feature:
+- Number of major vessels (ca)
+- ST depression (oldpeak)
+- Age
 
-- Compute odds ratios across posterior draws
-- Summarize with:
-  - odds_ratio_mean
-  - 95% credible interval (2.5th and 97.5th percentiles)
+Categorical predictors show wider credible intervals, indicating greater uncertainty.
 
-Saved to:
+---
 
-- results/bayes_odds_ratios.csv
+## Outputs
 
-Columns:
+Generated artifacts:
 
-- feature
-- odds_ratio_mean
-- ci_low
-- ci_high
-
-Interpretation:
-
-- odds_ratio_mean greater than 1 suggests increased odds of disease
-- odds_ratio_mean less than 1 suggests decreased odds of disease
-- if the credible interval includes 1, the direction or magnitude is not strongly identified by the data under this model
+results/bayes_auc_draws.csv  
+results/bayes_odds_ratios.csv  
+results/fig_auc_posterior.png  
+results/fig_or_forest.png  
+results/fig_calibration.png  
 
 ---
 
 ## How to Run
 
-1) Create and activate a virtual environment (recommended)
+1) Install dependencies
 
-    python3 -m venv .venv
-    source .venv/bin/activate
+pip install -r requirements.txt
 
-2) Install dependencies
+2) Place dataset at:
 
-    pip install -r requirements.txt
+data/heart_disease_uci.csv
 
-3) Place dataset at:
+3) Run
 
-    data/heart_disease_uci.csv
-
-4) Run Bayesian analysis
-
-    python src/bayes_logit.py
-
----
-
-## Performance Notes (PyMC and compilation)
-
-Bayesian sampling benefits strongly from a working C compiler and Python headers.
-
-On Amazon Linux / CloudShell, install:
-
-    sudo yum install gcc-c++ python3-devel
-
-If compilation is not available, sampling may still run but can be much slower.
+python src/bayes_logit.py
 
 ---
 
@@ -215,4 +131,4 @@ If compilation is not available, sampling may still run but can be much slower.
 
 Educational and portfolio use.
 
-Dataset credit: UCI Machine Learning Repository.
+
